@@ -1,0 +1,124 @@
+services:
+    web:
+        image: nginx:alpine
+        ports:
+            - "80:80"
+        volumes:
+            - ${WEB_ROOT}:/usr/share/nginx/html:ro
+        restart: unless-stopped
+        networks:
+            - nws-net
+
+    retrieve_images:
+        build: ./retrieve_images
+        command: ["python", "retrieve_images.py"]
+        environment:
+            - OUTPUT_DIR=/mnt/site
+            - TZ=America/New_York
+        volumes:
+            - ${WEB_ROOT}:/mnt/site
+        restart: unless-stopped
+        networks:
+            - nws-net
+
+    stitch_animations:
+        build: ./stitch_animations
+        cpus: "1.00"
+        command: ["python", "stitch_animations.py"]
+        environment:
+            - OUTPUT_DIR=/mnt/site
+            - RUN_INTERVAL_SECONDS=300    # every 5 minutes (adjust as needed)
+            - TZ=America/New_York
+        volumes:
+            - ${WEB_ROOT}:/mnt/site
+        restart: unless-stopped
+        networks:
+            - nws-net
+
+    scrape_current_conditions:
+        build: ./scrape_current_conditions
+        command: ["python", "scrape_current_conditions.py"]
+        environment:
+            - NWS_USER=${NWS_POSTGRES_USER}
+            - NWS_PWD=${NWS_POSTGRES_PASSWORD}
+            - NWS_DB=${NWS_POSTGRES_DB}
+            - NWS_PORT=${NWS_POSTGRES_PORT}
+        volumes:
+            - ${WEB_ROOT}:/mnt/site
+        restart: unless-stopped
+        networks:
+            - nws-net
+
+    save_forecast_xml:
+        build: ./save_forecast_xml
+        command: ["python", "save_forecast_xml.py"]
+        volumes:
+          - nws:/out
+        restart: unless-stopped
+        networks:
+            - nws-net
+
+    db:
+        image: postgres:16
+        container_name: postgres-db
+        restart: unless-stopped
+        environment:
+            POSTGRES_USER: ${NWS_POSTGRES_USER}
+            POSTGRES_PASSWORD: ${NWS_POSTGRES_PASSWORD}
+            POSTGRES_DB: ${NWS_POSTGRES_DB}
+        ports:
+            - "5432:5432"
+        volumes:
+            - ./data/postgres:/var/lib/postgresql/data
+        mem_limit: "512m"
+        cpus: "1.0"
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U ${NWS_POSTGRES_USER} -d ${NWS_POSTGRES_DB}"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        networks:
+          - nws-net
+
+    pgadmin:
+        image: dpage/pgadmin4:latest
+        container_name: pgadmin
+        restart: unless-stopped
+        environment:
+            PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+            PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+        ports:
+            - "5050:80"
+        depends_on:
+            - db
+        volumes:
+            - ./data/pgadmin:/var/lib/pgadmin
+        mem_limit: "256m"
+        cpus: "0.5"
+        networks:
+            - nws-net
+
+    grafana:
+        image: grafana/grafana-oss:latest
+        container_name: grafana
+        restart: unless-stopped
+        ports:
+            - "3000:3000"
+        volumes:
+            - ./data/grafana:/var/lib/grafana
+        depends_on:
+            - db
+        networks:
+            - nws-net
+
+volumes:
+    nws:
+        driver: local
+        driver_opts:
+            type: cifs
+            device: ${FORECAST_SHARE_PATH}
+            o: username=${FORECAST_SHARE_USERNAME},password=${FORECAST_SHARE_PASSWORD},uid=1000,gid=1000,vers=3.0,file_mode=0644,dir_mode=0755
+
+networks:
+    nws-net:
+        driver: bridge
