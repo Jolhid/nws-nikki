@@ -54,6 +54,7 @@ services:
         command: ["python", "save_forecast_xml.py"]
         volumes:
           - nws:/out
+          - ${WEB_ROOT}:/mnt/site
         restart: unless-stopped
         networks:
             - nws-net

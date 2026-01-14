@@ -4,6 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import psycopg
 import os
+import math
 
 HEADERS = {'User-Agent': 'Jolhid NWS (jolhid@gmail.com)'}
 OutputPath = "/mnt/site/currcond.html"
@@ -94,7 +95,7 @@ def update_current_conditions_web(data):
     if data['temperature'] is None:
         tempF = "NA"
     else:
-        tempF = (data['temperature'] * (9/5)) + 32
+        tempF = math.floor((data['temperature'] * (9/5)) + 32)
     
     if data['windSpeed'] is None:
         wind = "Calm"
@@ -108,9 +109,9 @@ def update_current_conditions_web(data):
         windGustMPH = f"G{round(windGustMPH,0)}"
         
     if isnumber(data['windChill']):
-        feelsLike = round((data['windChill'] * (9/5)) + 32, 0)
+        feelsLike = math.floor((data['windChill'] * (9/5)) + 32, 0)
     elif isnumber(data['heatIndex']):
-        feelsLike = round((data['heatIndex'] * (9/5)) + 32, 0)
+        feelsLike = math.floor((data['heatIndex'] * (9/5)) + 32, 0)
     else:
         feelsLike = tempF
         
@@ -156,8 +157,8 @@ def main():
 
             # Insert into the table (Delete any other records for this station at this time first)
             insert_observation(obs, location)
-            if location == "KGAI":
-                LogToFile(f"Writing KGAI observation to web...")
+            if location == "KCGS":
+                LogToFile(f"Writing KCGS observation to web...")
                 update_current_conditions_web(obs)
 
         #Sleep for 5 minutes
